@@ -152,8 +152,11 @@ if st.session_state.busca_resultados:
     st.header("🌟 2. Resultados da Busca")
     st.info(f"✨ Foram encontrados {len(st.session_state.busca_resultados)} registros. Selecione um para editar ou excluir.")
 
-    opcoes_radio = [f"{a['registro'].to_dict()} (Planilha: {a['nome_arquivo']})" for a in st.session_state.busca_resultados]
-    selecao_usuario = st.radio("🔎 Selecione o registro que deseja manipular:", options=opcoes_radio, key="selecao_de_registro")
+    opcoes_radio = [
+        f"{i + 1}. {a['registro'].to_dict()} (Planilha: {a['nome_arquivo']})"
+        for i, a in enumerate(st.session_state.busca_resultados)
+    ]
+    selecao_usuario = st.radio("🔎 Selecione o registro que deseja manipular:", options=opcoes_radio)
 
     indice_selecionado = opcoes_radio.index(selecao_usuario)
     resultado_escolhido = st.session_state.busca_resultados[indice_selecionado]
@@ -164,17 +167,21 @@ if st.session_state.busca_resultados:
 
     st.subheader("✏️ 3. Ação sobre o Registro Selecionado")
 
-    df_para_modificar = st.session_state.dados_modificados.get(nome_arquivo_encontrado, st.session_state.dados_originais[nome_arquivo_encontrado])
+    # Garante que o DataFrame esteja nos modificados
+    if nome_arquivo_encontrado not in st.session_state.dados_modificados:
+        st.session_state.dados_modificados[nome_arquivo_encontrado] = st.session_state.dados_originais[nome_arquivo_encontrado].copy()
+
+    df_para_modificar = st.session_state.dados_modificados[nome_arquivo_encontrado]
 
     acao = st.radio("O que você deseja fazer?", ("Nenhuma", "Excluir o registro", "Editar o registro"), horizontal=True)
 
     if acao == "Excluir o registro":
         st.warning("Atenção! Esta ação removerá a linha inteira.")
-        if st.button("🗑️ Confirmar Exclusão", key="confirmar_exclusao"):
-            df_modificado = df_para_modificar.drop(index_registro).reset_index(drop=True)
+        if st.button("🗑️ Confirmar Exclusão"):
+            df_modificado = df_para_modificar.drop(index=index_registro).reset_index(drop=True)
             st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado
             st.session_state.busca_resultados = []
-            st.success(f"✅ Registro excluído de '{nome_arquivo_encontrado}'! A visualização foi atualizada.")
+            st.success(f"✅ Registro excluído de '{nome_arquivo_encontrado}'!")
             st.rerun()
 
     if acao == "Editar o registro":
@@ -183,20 +190,19 @@ if st.session_state.busca_resultados:
         valor_atual = registro_encontrado[coluna_para_editar]
         novo_valor = st.text_input(f"Digite o novo valor para '{coluna_para_editar}':", value=str(valor_atual))
 
-        if st.button("📏 Salvar Alteração", key="salvar_edicao"):
-            df_modificado = df_para_modificar.copy()
+        if st.button("📏 Salvar Alteração"):
             try:
-                tipo_original = df_modificado[coluna_para_editar].dtype
+                tipo_original = df_para_modificar[coluna_para_editar].dtype
                 novo_valor_convertido = pd.Series([novo_valor]).astype(tipo_original).iloc[0]
-                df_modificado.loc[index_registro, coluna_para_editar] = novo_valor_convertido
-            except (ValueError, TypeError):
-                df_modificado.loc[index_registro, coluna_para_editar] = novo_valor
+            except Exception:
+                novo_valor_convertido = novo_valor
 
+            df_modificado = df_para_modificar.copy()
+            df_modificado.at[index_registro, coluna_para_editar] = novo_valor_convertido
             st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado
             st.session_state.busca_resultados = []
-            st.success(f"✅ Registro editado em '{nome_arquivo_encontrado}'! A visualização foi atualizada.")
+            st.success(f"✅ Registro editado com sucesso em '{nome_arquivo_encontrado}'!")
             st.rerun()
-
 # --- Download ---
 if st.session_state.dados_modificados:
     st.markdown("---")
@@ -216,3 +222,4 @@ if st.session_state.dados_modificados:
                 mime="text/csv",
                 key=f"download_{nome_arquivo}"
             )
+
