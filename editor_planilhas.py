@@ -112,44 +112,53 @@ if st.button("🔍 Buscar"):
                 'registro': row
             })
 
-if st.session_state['busca_resultados']:
+# --- Ações ---
+if st.session_state.busca_resultados:
     st.markdown("---")
-    st.subheader("🌟 Resultados Encontrados")
-    opcoes = [
-        f"{i+1}. {r['registro'].to_dict()} (Arquivo: {r['nome_arquivo']})"
-        for i, r in enumerate(st.session_state['busca_resultados'])
-    ]
-    selecao = st.radio("Selecione um registro:", opcoes)
-    selecionado = st.session_state['busca_resultados'][opcoes.index(selecao)]
+    st.header("🌟 2. Resultados da Busca")
+    st.info(f"✨ Foram encontrados {len(st.session_state.busca_resultados)} registros. Selecione um para editar ou excluir.")
 
-    nome_arquivo = selecionado['nome_arquivo']
-    idx = selecionado['index']
-    df_mod = st.session_state['dados_modificados'][nome_arquivo]
+    opcoes_radio = [f"{i+1}. {a['registro'].to_dict()} (Planilha: {a['nome_arquivo']})" for i, a in enumerate(st.session_state.busca_resultados)]
+    selecao_usuario = st.radio("🔎 Selecione o registro que deseja manipular:", options=opcoes_radio, key="selecao_de_registro")
 
-    acao = st.radio("Ação:", ["Nenhuma", "Editar", "Excluir"], horizontal=True)
+    indice_selecionado = opcoes_radio.index(selecao_usuario)
+    resultado_escolhido = st.session_state.busca_resultados[indice_selecionado]
 
-    if acao == "Excluir":
-        if st.button("🗑️ Confirmar Exclusão"):
-            df_mod = df_mod.drop(idx).reset_index(drop=True)
-            st.session_state['dados_modificados'][nome_arquivo] = df_mod
-            st.success("Registro excluído com sucesso!")
+    registro_encontrado = resultado_escolhido["registro"]
+    nome_arquivo_encontrado = resultado_escolhido["nome_arquivo"]
+    df_para_modificar = st.session_state.dados_modificados.get(nome_arquivo_encontrado, st.session_state.dados_originais[nome_arquivo_encontrado])
+    index_registro = registro_encontrado.name
+
+    st.subheader("✏️ 3. Ação sobre o Registro Selecionado")
+    acao = st.radio("O que você deseja fazer?", ("Nenhuma", "Excluir o registro", "Editar o registro"), horizontal=True)
+
+    if acao == "Excluir o registro":
+        st.warning("Atenção! Esta ação removerá a linha inteira.")
+        if st.button("🗑️ Confirmar Exclusão", key="confirmar_exclusao"):
+            df_modificado = df_para_modificar.drop(index_registro).reset_index(drop=True)
+            st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado
+            st.success(f"✅ Registro excluído de '{nome_arquivo_encontrado}'!")
             st.rerun()
 
-    elif acao == "Editar":
-        colunas = df_mod.columns.tolist()
-        coluna = st.selectbox("Coluna para editar:", colunas)
-        valor_atual = df_mod.loc[idx, coluna]
-        novo_valor = st.text_input("Novo valor:", str(valor_atual))
-        if st.button("📏 Salvar Edição"):
+    elif acao == "Editar o registro":
+        colunas_disponiveis = df_para_modificar.columns.tolist()
+        coluna_para_editar = st.selectbox("Escolha a coluna para editar:", options=colunas_disponiveis)
+        valor_atual = registro_encontrado[coluna_para_editar]
+        novo_valor = st.text_input(f"Digite o novo valor para '{coluna_para_editar}':", value=str(valor_atual))
+
+        if st.button("📏 Salvar Alteração", key="salvar_edicao"):
+            df_modificado = df_para_modificar.copy()
             try:
-                tipo = df_mod[coluna].dtype
-                valor_convertido = pd.Series([novo_valor]).astype(tipo).iloc[0]
-            except:
-                valor_convertido = novo_valor
-            df_mod.at[idx, coluna] = valor_convertido
-            st.session_state['dados_modificados'][nome_arquivo] = df_mod
-            st.success("Registro editado com sucesso!")
+                tipo_original = df_modificado[coluna_para_editar].dtype
+                novo_valor_convertido = pd.Series([novo_valor]).astype(tipo_original).iloc[0]
+                df_modificado.at[index_registro, coluna_para_editar] = novo_valor_convertido
+            except Exception:
+                df_modificado.at[index_registro, coluna_para_editar] = novo_valor
+
+            st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado
+            st.success(f"✅ Registro editado em '{nome_arquivo_encontrado}'!")
             st.rerun()
+
 
 # --- Download ---
 if st.session_state['dados_modificados']:
@@ -164,3 +173,4 @@ if st.session_state['dados_modificados']:
             file_name=nome_final,
             mime="text/csv"
         )
+
