@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import glob
 
 # --- Configuração da Página ---
 st.set_page_config(
@@ -18,24 +19,23 @@ def obter_csv_binario_para_download(df):
     csv_texto = converter_df_para_csv(df)
     return csv_texto.encode('utf-8')
 
-def carregar_arquivo(arquivo_carregado):
+def carregar_arquivo_por_caminho(caminho):
     try:
-        _, extensao = os.path.splitext(arquivo_carregado.name)
+        _, extensao = os.path.splitext(caminho)
         if extensao == '.csv':
             try:
-                df = pd.read_csv(arquivo_carregado, encoding='utf-8')
+                df = pd.read_csv(caminho, encoding='utf-8')
             except UnicodeDecodeError:
-                df = pd.read_csv(arquivo_carregado, encoding='latin1')
+                df = pd.read_csv(caminho, encoding='latin1')
         elif extensao in ['.xlsx', '.xls']:
-            df = pd.read_excel(arquivo_carregado)
+            df = pd.read_excel(caminho)
         else:
             return None
 
-        # Remove linhas completamente vazias
         df.dropna(how='all', inplace=True)
         return df
     except Exception as e:
-        st.error(f"Erro ao ler o arquivo {arquivo_carregado.name}: {e}")
+        st.error(f"Erro ao ler o arquivo {os.path.basename(caminho)}: {e}")
         return None
 
 # --- Inicialização do Session State ---
@@ -51,50 +51,52 @@ with st.sidebar:
     st.title("🗂️ Editor de Planilhas")
     st.markdown("---")
 
-    arquivos_carregados = st.file_uploader(
-        "📂 1. Carregue suas planilhas",
-        type=['csv', 'xlsx', 'xls'],
-        accept_multiple_files=True
-    )
+    st.markdown("**📂 1. Informe o caminho da pasta local (com arquivos .csv ou .xlsx):**")
+    pasta = st.text_input("Caminho completo da pasta:", value="")
 
-    if arquivos_carregados:
-        novos_nomes = [f.name for f in arquivos_carregados]
-        if set(novos_nomes) != set(st.session_state.dados_originais.keys()):
+    if pasta and os.path.isdir(pasta):
+        arquivos_encontrados = glob.glob(os.path.join(pasta, "**", "*.*"), recursive=True)
+        arquivos_planilhas = [f for f in arquivos_encontrados if f.lower().endswith(('.csv', '.xlsx', '.xls'))]
+
+        if arquivos_planilhas:
+            st.success(f"{len(arquivos_planilhas)} arquivos encontrados.")
             st.session_state.dados_originais = {}
             st.session_state.dados_modificados = {}
             st.session_state.busca_resultados = []
-            for arquivo in arquivos_carregados:
-                st.session_state.dados_originais[arquivo.name] = carregar_arquivo(arquivo)
+            for caminho in arquivos_planilhas:
+                nome = os.path.relpath(caminho, pasta)
+                st.session_state.dados_originais[nome] = carregar_arquivo_por_caminho(caminho)
 
-        arquivos_xlsx = [f for f in st.session_state.dados_originais.keys() if f.endswith(('.xlsx', '.xls'))]
-        if arquivos_xlsx:
-            st.header("⚙️ Conversor XLSX → CSV")
-            xlsx_para_converter = st.selectbox("Selecione um arquivo XLSX para converter:", options=arquivos_xlsx)
+            arquivos_xlsx = [f for f in st.session_state.dados_originais.keys() if f.endswith(('.xlsx', '.xls'))]
+            if arquivos_xlsx:
+                st.header("⚙️ Conversor XLSX → CSV")
+                xlsx_para_converter = st.selectbox("Selecione um arquivo XLSX para converter:", options=arquivos_xlsx)
 
-            if xlsx_para_converter:
-                df_para_converter = st.session_state.dados_originais.get(xlsx_para_converter)
+                if xlsx_para_converter:
+                    df_para_converter = st.session_state.dados_originais.get(xlsx_para_converter)
 
-                if df_para_converter is not None and isinstance(df_para_converter, pd.DataFrame):
-                    csv_convertido = obter_csv_binario_para_download(df_para_converter)
-                    st.download_button(
-                        label="⬇️ Baixar CSV Convertido",
-                        data=csv_convertido,
-                        file_name=f"{os.path.splitext(xlsx_para_converter)[0]}.csv",
-                        mime="text/csv"
-                    )
-                else:
-                    st.error(f"❌ O arquivo '{xlsx_para_converter}' não pôde ser carregado corretamente como DataFrame.")
+                    if df_para_converter is not None and isinstance(df_para_converter, pd.DataFrame):
+                        csv_convertido = obter_csv_binario_para_download(df_para_converter)
+                        st.download_button(
+                            label="⬇️ Baixar CSV Convertido",
+                            data=csv_convertido,
+                            file_name=f"{os.path.splitext(os.path.basename(xlsx_para_converter))[0]}.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        st.error(f"❌ O arquivo '{xlsx_para_converter}' não pôde ser carregado corretamente como DataFrame.")
 
-            st.markdown("---")
+                st.markdown("---")
+        else:
+            st.warning("Nenhum arquivo .csv ou .xlsx encontrado na pasta informada.")
 
 # --- Conteúdo Principal ---
 st.title("📈 Editor e Localizador de Dados")
 
 if not st.session_state.dados_originais:
-    st.info("👋 Bem-vindo! Por favor, carregue uma ou mais planilhas na barra lateral para começar.")
+    st.info("👋 Bem-vindo! Por favor, informe uma pasta com planilhas na barra lateral para começar.")
     st.stop()
 
-# Exibe planilhas em abas
 nomes_arquivos = list(st.session_state.dados_originais.keys())
 abas = st.tabs([f"📄 {nome}" for nome in nomes_arquivos])
 for i, aba in enumerate(abas):
@@ -195,7 +197,7 @@ if st.session_state.dados_modificados:
             st.write(f"Planilha modificada: `{nome_arquivo}`")
         with col2:
             csv_final = obter_csv_binario_para_download(df_final)
-            nome_original, _ = os.path.splitext(nome_arquivo)
+            nome_original, _ = os.path.splitext(os.path.basename(nome_arquivo))
             nome_arquivo_final = f"{nome_original}_modificado.csv"
             st.download_button(
                 label=f"⬇️ Baixar CSV",
