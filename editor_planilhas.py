@@ -22,7 +22,10 @@ def carregar_arquivo(arquivo_carregado):
     try:
         _, extensao = os.path.splitext(arquivo_carregado.name)
         if extensao == '.csv':
-            df = pd.read_csv(arquivo_carregado)
+            try:
+                df = pd.read_csv(arquivo_carregado, encoding='utf-8')
+            except UnicodeDecodeError:
+                df = pd.read_csv(arquivo_carregado, encoding='latin1')
         elif extensao in ['.xlsx', '.xls']:
             df = pd.read_excel(arquivo_carregado)
         else:
@@ -43,7 +46,7 @@ if 'dados_modificados' not in st.session_state:
 if 'busca_resultados' not in st.session_state:
     st.session_state.busca_resultados = []
 
-# --- Barra Lateral (Sidebar) ---
+# --- Barra Lateral ---
 with st.sidebar:
     st.title("🗂️ Editor de Planilhas")
     st.markdown("---")
@@ -91,7 +94,7 @@ if not st.session_state.dados_originais:
     st.info("👋 Bem-vindo! Por favor, carregue uma ou mais planilhas na barra lateral para começar.")
     st.stop()
 
-# Exibe todas as planilhas carregadas em abas
+# Exibe planilhas em abas
 nomes_arquivos = list(st.session_state.dados_originais.keys())
 abas = st.tabs([f"📄 {nome}" for nome in nomes_arquivos])
 for i, aba in enumerate(abas):
@@ -101,7 +104,7 @@ for i, aba in enumerate(abas):
         if df_para_exibir is not None:
             st.dataframe(df_para_exibir, use_container_width=True)
 
-# --- Seção de Pesquisa ---
+# --- Busca ---
 st.header("🔎 1. Encontrar Registros ou Linhas Vazias")
 termo_busca = st.text_input("Digite o termo que deseja encontrar:")
 
@@ -113,10 +116,15 @@ if st.button("Procurar em Todas as Planilhas"):
         df_busca = st.session_state.dados_modificados.get(nome_arquivo, df_original)
 
         if termo_busca:
-            condicoes = df_busca.astype(str).apply(lambda col: col.str.contains(termo_busca, case=False, na=False))
+            condicoes = pd.DataFrame(False, index=df_busca.index, columns=df_busca.columns)
+            for coluna in df_busca.columns:
+                try:
+                    condicoes[coluna] = df_busca[coluna].astype(str).str.contains(termo_busca, case=False, na=False)
+                except Exception:
+                    pass
             resultados_no_arquivo = df_busca[condicoes.any(axis=1)]
         else:
-            resultados_no_arquivo = df_busca[df_busca.isnull().all(axis=1)]  # apenas linhas completamente vazias
+            resultados_no_arquivo = df_busca[df_busca.isnull().all(axis=1)]
 
         for index, row in resultados_no_arquivo.iterrows():
             lista_de_achados.append({"registro": row, "nome_arquivo": nome_arquivo})
@@ -126,7 +134,7 @@ if st.button("Procurar em Todas as Planilhas"):
     else:
         st.warning("Nenhum registro correspondente ou linha vazia encontrada.")
 
-# --- Seção de Ações ---
+# --- Ações ---
 if st.session_state.busca_resultados:
     st.markdown("---")
     st.header("🌟 2. Resultados da Busca")
@@ -177,7 +185,7 @@ if st.session_state.busca_resultados:
             st.success(f"✅ Registro editado em '{nome_arquivo_encontrado}'! A visualização foi atualizada.")
             st.rerun()
 
-# --- Seção de Download ---
+# --- Download ---
 if st.session_state.dados_modificados:
     st.markdown("---")
     st.header("📏 Baixar Planilhas Modificadas")
