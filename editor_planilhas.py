@@ -12,20 +12,13 @@ st.set_page_config(
 # --- Funções Auxiliares ---
 @st.cache_data
 def converter_df_para_csv(df):
-    """Converte um DataFrame para CSV em memória para o botão de download."""
-    return df.to_csv(index=False).encode('utf-8')
+    """Converte um DataFrame para CSV em texto (sem encoding binário)."""
+    return df.to_csv(index=False)
 
-def carregar_arquivo(arquivo_carregado):
-    """Lê um arquivo (CSV ou XLSX) e retorna um DataFrame do Pandas."""
-    try:
-        _, extensao = os.path.splitext(arquivo_carregado.name)
-        if extensao == '.csv':
-            return pd.read_csv(arquivo_carregado)
-        elif extensao in ['.xlsx', '.xls']:
-            return pd.read_excel(arquivo_carregado)
-    except Exception as e:
-        st.error(f"Erro ao ler o arquivo {arquivo_carregado.name}: {e}")
-    return None
+def obter_csv_binario_para_download(df):
+    """Codifica CSV em bytes (fora do cache) para ser usado no botão de download."""
+    csv_texto = converter_df_para_csv(df)
+    return csv_texto.encode('utf-8')
 
 # --- Inicialização do Session State ---
 if 'dados_originais' not in st.session_state:
@@ -62,7 +55,8 @@ with st.sidebar:
         xlsx_para_converter = st.selectbox("Selecione um arquivo XLSX para converter:", options=arquivos_xlsx)
         if xlsx_para_converter:
             df_para_converter = st.session_state.dados_originais[xlsx_para_converter]
-            csv_convertido = converter_df_para_csv(df_para_converter)
+            csv_convertido = obter_csv_binario_para_download(df_para_converter)
+
             st.download_button(
                 label="⬇️ Baixar CSV Convertido",
                 data=csv_convertido,
@@ -179,4 +173,5 @@ if st.session_state.dados_modificados:
             csv_final = converter_df_para_csv(df_final)
             nome_original, _ = os.path.splitext(nome_arquivo)
             nome_arquivo_final = f"{nome_original}_modificado.csv"
+
             st.download_button(label=f"⬇️ Baixar CSV", data=csv_final, file_name=nome_arquivo_final, mime="text/csv", key=f"download_{nome_arquivo}")
