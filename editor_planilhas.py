@@ -33,7 +33,7 @@ def carregar_arquivo(arquivo_carregado, nome=None):
         else:
             return None
 
-        df.dropna(how='all', inplace=True)  # remove linhas vazias automaticamente
+        df.dropna(how='all', inplace=True)
         return df
     except Exception as e:
         st.error(f"Erro ao ler o arquivo {nome or arquivo_carregado.name}: {e}")
@@ -46,6 +46,8 @@ if 'dados_modificados' not in st.session_state:
     st.session_state.dados_modificados = {}
 if 'busca_resultados' not in st.session_state:
     st.session_state.busca_resultados = []
+if 'registro_editado' not in st.session_state:
+    st.session_state.registro_editado = None
 
 # --- Barra Lateral ---
 with st.sidebar:
@@ -164,13 +166,13 @@ if st.session_state.busca_resultados:
 
     df_para_modificar = st.session_state.dados_modificados.get(nome_arquivo_encontrado, st.session_state.dados_originais[nome_arquivo_encontrado])
 
-    acao = st.radio("O que você deseja fazer?", ("Nenhuma", "Excluir o registro", "Editar o registro"), horizontal=True, key="acao_radio")
+    acao = st.radio("O que você deseja fazer?", ("Nenhuma", "Excluir o registro", "Editar o registro"), horizontal=True)
 
     if acao == "Excluir o registro":
         st.warning("Atenção! Esta ação removerá a linha inteira.")
-        if st.button("🗑️ Confirmar Exclusão", type="primary"):
-            df_modificado = df_para_modificar.drop(index_registro)
-            st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado.reset_index(drop=True)
+        if st.button("🗑️ Confirmar Exclusão", key="confirmar_exclusao"):
+            df_modificado = df_para_modificar.drop(index_registro).reset_index(drop=True)
+            st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado
             st.session_state.busca_resultados = []
             st.success(f"✅ Registro excluído de '{nome_arquivo_encontrado}'! A visualização foi atualizada.")
             st.rerun()
@@ -179,9 +181,9 @@ if st.session_state.busca_resultados:
         colunas_disponiveis = df_para_modificar.columns.tolist()
         coluna_para_editar = st.selectbox("Escolha a coluna para editar:", options=colunas_disponiveis)
         valor_atual = registro_encontrado[coluna_para_editar]
-        novo_valor = st.text_input(f"Digite o novo valor para '{coluna_para_editar}':", value=str(valor_atual), key=f"edit_{indice_selecionado}")
+        novo_valor = st.text_input(f"Digite o novo valor para '{coluna_para_editar}':", value=str(valor_atual))
 
-        if st.button("📏 Salvar Alteração"):
+        if st.button("📏 Salvar Alteração", key="salvar_edicao"):
             df_modificado = df_para_modificar.copy()
             try:
                 tipo_original = df_modificado[coluna_para_editar].dtype
