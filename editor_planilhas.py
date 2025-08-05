@@ -175,25 +175,26 @@ if st.session_state.busca_resultados:
             st.success(f"✅ Registro excluído de '{nome_arquivo_encontrado}'! A visualização foi atualizada.")
             st.rerun()
 
-    elif acao == "Editar o registro":
+        elif acao == "Editar o registro":
         colunas_disponiveis = df_para_modificar.columns.tolist()
         coluna_para_editar = st.selectbox("Escolha a coluna para editar:", options=colunas_disponiveis)
         valor_atual = registro_encontrado[coluna_para_editar]
         novo_valor = st.text_input(f"Digite o novo valor para '{coluna_para_editar}':", value=str(valor_atual), key=f"edit_{indice_selecionado}")
 
         if st.button("📏 Salvar Alteração"):
-            df_modificado = df_para_modificar.copy()
+            df_modificado = df_para_modificar.copy()  # <--- Garantir cópia
             try:
                 tipo_original = df_modificado[coluna_para_editar].dtype
                 novo_valor_convertido = pd.Series([novo_valor]).astype(tipo_original).iloc[0]
-                df_modificado.loc[index_registro, coluna_para_editar] = novo_valor_convertido
+                df_modificado.at[index_registro, coluna_para_editar] = novo_valor_convertido
             except (ValueError, TypeError):
-                df_modificado.loc[index_registro, coluna_para_editar] = novo_valor
+                df_modificado.at[index_registro, coluna_para_editar] = novo_valor  # Fallback para texto
 
             st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado
             st.session_state.busca_resultados = []
             st.success(f"✅ Registro editado em '{nome_arquivo_encontrado}'! A visualização foi atualizada.")
             st.rerun()
+
 
 # --- Download ---
 if st.session_state.dados_modificados:
@@ -214,3 +215,4 @@ if st.session_state.dados_modificados:
                 mime="text/csv",
                 key=f"download_{nome_arquivo}"
             )
+
