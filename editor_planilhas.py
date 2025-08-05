@@ -33,7 +33,7 @@ def carregar_arquivo(arquivo_carregado, nome=None):
         else:
             return None
 
-        df.dropna(how='all', inplace=True)
+        df.dropna(how='all', inplace=True)  # remove linhas vazias automaticamente
         return df
     except Exception as e:
         st.error(f"Erro ao ler o arquivo {nome or arquivo_carregado.name}: {e}")
@@ -170,7 +170,7 @@ if st.session_state.busca_resultados:
         st.warning("Atenção! Esta ação removerá a linha inteira.")
         if st.button("🗑️ Confirmar Exclusão", type="primary"):
             df_modificado = df_para_modificar.drop(index_registro)
-            st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado
+            st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado.reset_index(drop=True)
             st.session_state.busca_resultados = []
             st.success(f"✅ Registro excluído de '{nome_arquivo_encontrado}'! A visualização foi atualizada.")
             st.rerun()
