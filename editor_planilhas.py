@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import os
+import io
+from zipfile import ZipFile
 
 # --- Configuração da Página ---
 st.set_page_config(
@@ -18,9 +20,9 @@ def obter_csv_binario_para_download(df):
     csv_texto = converter_df_para_csv(df)
     return csv_texto.encode('utf-8')
 
-def carregar_arquivo(arquivo_carregado):
+def carregar_arquivo(arquivo_carregado, nome=None):
     try:
-        _, extensao = os.path.splitext(arquivo_carregado.name)
+        extensao = os.path.splitext(arquivo_carregado.name if not nome else nome)[1].lower()
         if extensao == '.csv':
             try:
                 df = pd.read_csv(arquivo_carregado, encoding='utf-8')
@@ -34,7 +36,7 @@ def carregar_arquivo(arquivo_carregado):
         df.dropna(how='all', inplace=True)
         return df
     except Exception as e:
-        st.error(f"Erro ao ler o arquivo {arquivo_carregado.name}: {e}")
+        st.error(f"Erro ao ler o arquivo {nome or arquivo_carregado.name}: {e}")
         return None
 
 # --- Inicialização do Session State ---
@@ -50,20 +52,31 @@ with st.sidebar:
     st.title("🗂️ Editor de Planilhas")
     st.markdown("---")
 
+    st.markdown("#### 📁 1. Selecione arquivos ou um ZIP com planilhas")
     arquivos_carregados = st.file_uploader(
-        "📂 1. Selecione os arquivos CSV/XLSX/XLS (múltiplos permitidos):",
-        type=['csv', 'xlsx', 'xls'],
+        "Selecione os arquivos CSV/XLSX/XLS ou ZIP contendo pastas com planilhas:",
+        type=['csv', 'xlsx', 'xls', 'zip'],
         accept_multiple_files=True
     )
 
     if arquivos_carregados:
-        novos_nomes = [f.name for f in arquivos_carregados]
-        if set(novos_nomes) != set(st.session_state.dados_originais.keys()):
-            st.session_state.dados_originais = {}
-            st.session_state.dados_modificados = {}
-            st.session_state.busca_resultados = []
-            for arquivo in arquivos_carregados:
-                st.session_state.dados_originais[arquivo.name] = carregar_arquivo(arquivo)
+        st.session_state.dados_originais = {}
+        st.session_state.dados_modificados = {}
+        st.session_state.busca_resultados = []
+
+        for arquivo in arquivos_carregados:
+            if arquivo.name.endswith('.zip'):
+                with ZipFile(arquivo) as zip_ref:
+                    for nome_arquivo in zip_ref.namelist():
+                        if nome_arquivo.endswith(('.csv', '.xlsx', '.xls')):
+                            with zip_ref.open(nome_arquivo) as arquivo_zipado:
+                                df = carregar_arquivo(arquivo_zipado, nome=nome_arquivo)
+                                if df is not None:
+                                    st.session_state.dados_originais[nome_arquivo] = df
+            else:
+                df = carregar_arquivo(arquivo)
+                if df is not None:
+                    st.session_state.dados_originais[arquivo.name] = df
 
         arquivos_xlsx = [nome for nome in st.session_state.dados_originais if nome.endswith(('.xlsx', '.xls'))]
         if arquivos_xlsx:
@@ -83,7 +96,6 @@ with st.sidebar:
                     )
                 else:
                     st.error(f"❌ O arquivo '{xlsx_para_converter}' não pôde ser carregado corretamente como DataFrame.")
-
             st.markdown("---")
 
 # --- Conteúdo Principal ---
