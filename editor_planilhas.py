@@ -12,21 +12,22 @@ st.set_page_config(
 # --- Funções Auxiliares ---
 @st.cache_data
 def converter_df_para_csv(df):
-    """Converte um DataFrame para CSV em texto (sem encoding binário)."""
     return df.to_csv(index=False)
 
 def obter_csv_binario_para_download(df):
-    """Codifica CSV em bytes (fora do cache) para ser usado no botão de download."""
     csv_texto = converter_df_para_csv(df)
     return csv_texto.encode('utf-8')
 
-# --- Inicialização do Session State ---
-if 'dados_originais' not in st.session_state:
-    st.session_state.dados_originais = {}
-if 'dados_modificados' not in st.session_state:
-    st.session_state.dados_modificados = {}
-if 'busca_resultados' not in st.session_state:
-    st.session_state.busca_resultados = []
+def carregar_arquivo(arquivo_carregado):
+    try:
+        _, extensao = os.path.splitext(arquivo_carregado.name)
+        if extensao == '.csv':
+            return pd.read_csv(arquivo_carregado)
+        elif extensao in ['.xlsx', '.xls']:
+            return pd.read_excel(arquivo_carregado)
+    except Exception as e:
+        st.error(f"Erro ao ler o arquivo {arquivo_carregado.name}: {e}")
+    return None
 
 # --- Barra Lateral (Sidebar) ---
 with st.sidebar:
@@ -175,3 +176,4 @@ if st.session_state.dados_modificados:
             nome_arquivo_final = f"{nome_original}_modificado.csv"
 
             st.download_button(label=f"⬇️ Baixar CSV", data=csv_final, file_name=nome_arquivo_final, mime="text/csv", key=f"download_{nome_arquivo}")
+
