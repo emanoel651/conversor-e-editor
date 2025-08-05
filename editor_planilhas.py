@@ -22,12 +22,18 @@ def carregar_arquivo(arquivo_carregado):
     try:
         _, extensao = os.path.splitext(arquivo_carregado.name)
         if extensao == '.csv':
-            return pd.read_csv(arquivo_carregado)
+            df = pd.read_csv(arquivo_carregado)
         elif extensao in ['.xlsx', '.xls']:
-            return pd.read_excel(arquivo_carregado)
+            df = pd.read_excel(arquivo_carregado)
+        else:
+            return None
+
+        # Remove linhas completamente vazias
+        df.dropna(how='all', inplace=True)
+        return df
     except Exception as e:
         st.error(f"Erro ao ler o arquivo {arquivo_carregado.name}: {e}")
-    return None
+        return None
 
 # --- Inicialização do Session State ---
 if 'dados_originais' not in st.session_state:
@@ -57,7 +63,6 @@ with st.sidebar:
             for arquivo in arquivos_carregados:
                 st.session_state.dados_originais[arquivo.name] = carregar_arquivo(arquivo)
 
-        # Menu de conversão de XLSX para CSV
         arquivos_xlsx = [f for f in st.session_state.dados_originais.keys() if f.endswith(('.xlsx', '.xls'))]
         if arquivos_xlsx:
             st.header("⚙️ Conversor XLSX → CSV")
@@ -97,32 +102,29 @@ for i, aba in enumerate(abas):
             st.dataframe(df_para_exibir, use_container_width=True)
 
 # --- Seção de Pesquisa ---
-st.header("🔎 1. Encontrar Registros em Todas as Planilhas")
-termo_busca = st.text_input("Digite o Nome ou Número que deseja encontrar:")
+st.header("🔎 1. Encontrar Registros ou Linhas Vazias")
+termo_busca = st.text_input("Digite o termo que deseja encontrar:")
 
 if st.button("Procurar em Todas as Planilhas"):
     st.session_state.busca_resultados = []
-    if termo_busca:
-        lista_de_achados = []
-        for nome_arquivo, df_original in st.session_state.dados_originais.items():
-            df_busca = st.session_state.dados_modificados.get(nome_arquivo, df_original)
-            colunas_presentes = all(col in df_busca.columns for col in ['Nome', 'Número'])
-            if not colunas_presentes:
-                continue
+    lista_de_achados = []
 
-            condicao_nome = df_busca['Nome'].astype(str).str.contains(termo_busca, case=False, na=False)
-            condicao_numero = df_busca['Número'].astype(str).str.contains(termo_busca, case=False, na=False)
-            resultados_no_arquivo = df_busca[condicao_nome | condicao_numero]
+    for nome_arquivo, df_original in st.session_state.dados_originais.items():
+        df_busca = st.session_state.dados_modificados.get(nome_arquivo, df_original)
 
-            for index, row in resultados_no_arquivo.iterrows():
-                lista_de_achados.append({"registro": row, "nome_arquivo": nome_arquivo})
-
-        if lista_de_achados:
-            st.session_state.busca_resultados = lista_de_achados
+        if termo_busca:
+            condicoes = df_busca.astype(str).apply(lambda col: col.str.contains(termo_busca, case=False, na=False))
+            resultados_no_arquivo = df_busca[condicoes.any(axis=1)]
         else:
-            st.warning("Nenhum registro encontrado com o termo informado em nenhuma das planilhas.")
+            resultados_no_arquivo = df_busca[df_busca.isnull().all(axis=1)]  # apenas linhas completamente vazias
+
+        for index, row in resultados_no_arquivo.iterrows():
+            lista_de_achados.append({"registro": row, "nome_arquivo": nome_arquivo})
+
+    if lista_de_achados:
+        st.session_state.busca_resultados = lista_de_achados
     else:
-        st.warning("Por favor, digite um termo para a busca.")
+        st.warning("Nenhum registro correspondente ou linha vazia encontrada.")
 
 # --- Seção de Ações ---
 if st.session_state.busca_resultados:
@@ -130,7 +132,7 @@ if st.session_state.busca_resultados:
     st.header("🌟 2. Resultados da Busca")
     st.info(f"✨ Foram encontrados {len(st.session_state.busca_resultados)} registros. Selecione um para editar ou excluir.")
 
-    opcoes_radio = [f"Nome: {a['registro']['Nome']}, Número: {a['registro']['Número']} (Planilha: {a['nome_arquivo']})" for a in st.session_state.busca_resultados]
+    opcoes_radio = [f"{a['registro'].to_dict()} (Planilha: {a['nome_arquivo']})" for a in st.session_state.busca_resultados]
     selecao_usuario = st.radio("🔎 Selecione o registro que deseja manipular:", options=opcoes_radio, key="selecao_de_registro")
 
     indice_selecionado = opcoes_radio.index(selecao_usuario)
@@ -156,10 +158,10 @@ if st.session_state.busca_resultados:
             st.rerun()
 
     elif acao == "Editar o registro":
-        sub_acao_editar = st.radio("Qual campo deseja editar?", ("Editar Nome", "Editar Número"))
-        coluna_para_editar = "Nome" if sub_acao_editar == "Editar Nome" else "Número"
+        colunas_disponiveis = df_para_modificar.columns.tolist()
+        coluna_para_editar = st.selectbox("Escolha a coluna para editar:", options=colunas_disponiveis)
         valor_atual = registro_encontrado[coluna_para_editar]
-        novo_valor = st.text_input(f"Digite o novo {coluna_para_editar}:", value=str(valor_atual), key=f"edit_{indice_selecionado}")
+        novo_valor = st.text_input(f"Digite o novo valor para '{coluna_para_editar}':", value=str(valor_atual), key=f"edit_{indice_selecionado}")
 
         if st.button("📏 Salvar Alteração"):
             df_modificado = df_para_modificar.copy()
