@@ -51,12 +51,20 @@ with st.sidebar:
 
     # Menu de conversão de XLSX para CSV
     arquivos_xlsx = [f for f in st.session_state.dados_originais.keys() if f.endswith(('.xlsx', '.xls'))]
-    if arquivos_xlsx:
-        st.header("⚙️ Conversor XLSX → CSV")
-        xlsx_para_converter = st.selectbox("Selecione um arquivo XLSX para converter:", options=arquivos_xlsx)
-        if xlsx_para_converter:
-            df_para_converter = st.session_state.dados_originais[xlsx_para_converter]
-            csv_convertido = obter_csv_binario_para_download(df_para_converter)
+    if xlsx_para_converter:
+    df_para_converter = st.session_state.dados_originais.get(xlsx_para_converter)
+    
+    if df_para_converter is not None and isinstance(df_para_converter, pd.DataFrame):
+        csv_convertido = obter_csv_binario_para_download(df_para_converter)
+        st.download_button(
+            label="⬇️ Baixar CSV Convertido",
+            data=csv_convertido,
+            file_name=f"{os.path.splitext(xlsx_para_converter)[0]}.csv",
+            mime="text/csv"
+        )
+    else:
+        st.error(f"❌ O arquivo '{xlsx_para_converter}' não pôde ser carregado corretamente como DataFrame.")
+
 
             st.download_button(
                 label="⬇️ Baixar CSV Convertido",
@@ -176,4 +184,5 @@ if st.session_state.dados_modificados:
             nome_arquivo_final = f"{nome_original}_modificado.csv"
 
             st.download_button(label=f"⬇️ Baixar CSV", data=csv_final, file_name=nome_arquivo_final, mime="text/csv", key=f"download_{nome_arquivo}")
+
 
