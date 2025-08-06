@@ -5,7 +5,7 @@ from zipfile import ZipFile
 
 st.set_page_config(page_title="Editor de Planilhas Pro", page_icon="📋", layout="wide")
 
-# Funções
+# --- Funções ---
 @st.cache_data
 def converter_df_para_csv(df):
     return df.to_csv(index=False)
@@ -32,12 +32,12 @@ def carregar_arquivo(arquivo_carregado, nome=None):
         st.error(f"Erro ao ler o arquivo {nome or arquivo_carregado.name}: {e}")
         return None
 
-# Session State
+# --- Session State ---
 for key in ['dados_originais', 'dados_modificados', 'busca_resultados']:
     if key not in st.session_state:
         st.session_state[key] = {}
 
-# Sidebar
+# --- Sidebar ---
 with st.sidebar:
     st.title("🗂️ Editor de Planilhas")
     st.markdown("---")
@@ -66,26 +66,25 @@ with st.sidebar:
                 if df is not None:
                     st.session_state['dados_originais'][arquivo.name] = df
 
-# Interface Principal
+# --- Interface Principal ---
 st.title("📈 Editor e Localizador de Dados")
 
 if not st.session_state['dados_originais']:
     st.info("👋 Por favor, selecione arquivos para continuar.")
     st.stop()
 
-# Inicializa dados modificados
 if not st.session_state['dados_modificados']:
     for nome, df in st.session_state['dados_originais'].items():
         st.session_state['dados_modificados'][nome] = df.copy()
 
-# Abas com planilhas
+# --- Abas com Planilhas ---
 abas = st.tabs([f"📄 {nome}" for nome in st.session_state['dados_modificados']])
 for i, aba in enumerate(abas):
     with aba:
         nome_arquivo = list(st.session_state['dados_modificados'].keys())[i]
         st.dataframe(st.session_state['dados_modificados'][nome_arquivo], use_container_width=True)
 
-# Busca
+# --- Busca ---
 st.header("🔎 Buscar Registros ou Linhas Vazias")
 termo_busca = st.text_input("Digite o termo ou deixe vazio para buscar linhas vazias:")
 
@@ -105,7 +104,7 @@ if st.button("🔍 Buscar"):
                 'registro': row
             })
 
-# Resultados da busca
+# --- Resultados da Busca ---
 if st.session_state['busca_resultados']:
     st.markdown("---")
     st.header("🌟 Resultados da Busca")
@@ -124,7 +123,7 @@ if st.session_state['busca_resultados']:
     index_registro = resultado_escolhido["index"]
     df_modificado = st.session_state['dados_modificados'][nome_arquivo_encontrado]
 
-     st.subheader("✏️ Ação sobre o Registro")
+    st.subheader("✏️ Ação sobre o Registro")
     acao = st.radio("O que deseja fazer?", ("Nenhuma", "Excluir o registro", "Editar o registro"), horizontal=True)
 
     if acao == "Excluir o registro":
@@ -172,7 +171,8 @@ if st.session_state['busca_resultados']:
             st.session_state['dados_modificados'][nome_arquivo_encontrado] = df_modificado
             st.success("✅ Registro atualizado com sucesso!")
             st.rerun()
-# Download
+
+# --- Download das Planilhas Modificadas ---
 if st.session_state['dados_modificados']:
     st.markdown("---")
     st.header("📥 Baixar Planilhas Modificadas")
@@ -185,4 +185,3 @@ if st.session_state['dados_modificados']:
             file_name=nome_final,
             mime="text/csv"
         )
-
