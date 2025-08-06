@@ -124,7 +124,7 @@ if st.session_state['busca_resultados']:
     index_registro = resultado_escolhido["index"]
     df_modificado = st.session_state['dados_modificados'][nome_arquivo_encontrado]
 
-    st.subheader("✏️ Ação sobre o Registro")
+     st.subheader("✏️ Ação sobre o Registro")
     acao = st.radio("O que deseja fazer?", ("Nenhuma", "Excluir o registro", "Editar o registro"), horizontal=True)
 
     if acao == "Excluir o registro":
@@ -136,22 +136,42 @@ if st.session_state['busca_resultados']:
             st.rerun()
 
     elif acao == "Editar o registro":
-        coluna_para_editar = st.selectbox("Escolha a coluna:", df_modificado.columns)
-        valor_atual = df_modificado.loc[index_registro, coluna_para_editar]
-        novo_valor = st.text_input("Novo valor:", value=str(valor_atual))
+        colunas = df_modificado.columns.tolist()
+        nome_editavel = 'Nome' in colunas
+        numero_editavel = 'Número' in colunas
 
-        if st.button("📏 Salvar Alteração"):
-            try:
-                tipo_original = df_modificado[coluna_para_editar].dtype
-                valor_convertido = pd.Series([novo_valor]).astype(tipo_original).iloc[0]
-                df_modificado.at[index_registro, coluna_para_editar] = valor_convertido
-            except Exception:
-                df_modificado.at[index_registro, coluna_para_editar] = novo_valor
+        if nome_editavel:
+            valor_nome = df_modificado.at[index_registro, 'Nome']
+            novo_nome = st.text_input("✏️ Novo valor para 'Nome':", value=str(valor_nome))
+        else:
+            novo_nome = None
+            st.warning("⚠️ A coluna 'Nome' não foi encontrada.")
+
+        if numero_editavel:
+            valor_numero = df_modificado.at[index_registro, 'Número']
+            novo_numero = st.text_input("🔢 Novo valor para 'Número':", value=str(valor_numero))
+        else:
+            novo_numero = None
+            st.warning("⚠️ A coluna 'Número' não foi encontrada.")
+
+        if st.button("📏 Salvar Alterações"):
+            if nome_editavel:
+                try:
+                    tipo_nome = df_modificado['Nome'].dtype
+                    df_modificado.at[index_registro, 'Nome'] = pd.Series([novo_nome]).astype(tipo_nome).iloc[0]
+                except Exception:
+                    df_modificado.at[index_registro, 'Nome'] = novo_nome
+
+            if numero_editavel:
+                try:
+                    tipo_numero = df_modificado['Número'].dtype
+                    df_modificado.at[index_registro, 'Número'] = pd.Series([novo_numero]).astype(tipo_numero).iloc[0]
+                except Exception:
+                    df_modificado.at[index_registro, 'Número'] = novo_numero
 
             st.session_state['dados_modificados'][nome_arquivo_encontrado] = df_modificado
-            st.success("✅ Registro editado!")
+            st.success("✅ Registro atualizado com sucesso!")
             st.rerun()
-
 # Download
 if st.session_state['dados_modificados']:
     st.markdown("---")
@@ -165,3 +185,4 @@ if st.session_state['dados_modificados']:
             file_name=nome_final,
             mime="text/csv"
         )
+
