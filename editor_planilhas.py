@@ -3,14 +3,9 @@ import pandas as pd
 import os
 from zipfile import ZipFile
 
-# --- Configuração da Página ---
-st.set_page_config(
-    page_title="Editor de Planilhas Pro",
-    page_icon="📋",
-    layout="wide"
-)
+st.set_page_config(page_title="Editor de Planilhas Pro", page_icon="📋", layout="wide")
 
-# --- Funções Auxiliares ---
+# Funções
 @st.cache_data
 def converter_df_para_csv(df):
     return df.to_csv(index=False)
@@ -31,25 +26,23 @@ def carregar_arquivo(arquivo_carregado, nome=None):
             df = pd.read_excel(arquivo_carregado)
         else:
             return None
-
         df.dropna(how='all', inplace=True)
         return df
     except Exception as e:
         st.error(f"Erro ao ler o arquivo {nome or arquivo_carregado.name}: {e}")
         return None
 
-# --- Inicialização do Session State ---
+# Session State
 for key in ['dados_originais', 'dados_modificados', 'busca_resultados']:
     if key not in st.session_state:
         st.session_state[key] = {}
 
-# --- Barra Lateral ---
+# Sidebar
 with st.sidebar:
     st.title("🗂️ Editor de Planilhas")
     st.markdown("---")
-
     arquivos_carregados = st.file_uploader(
-        "Selecione arquivos CSV/XLSX ou um ZIP contendo planilhas:",
+        "Selecione arquivos CSV/XLSX ou ZIP:",
         type=['csv', 'xlsx', 'xls', 'zip'],
         accept_multiple_files=True
     )
@@ -73,26 +66,26 @@ with st.sidebar:
                 if df is not None:
                     st.session_state['dados_originais'][arquivo.name] = df
 
-# --- Conteúdo Principal ---
+# Interface Principal
 st.title("📈 Editor e Localizador de Dados")
 
 if not st.session_state['dados_originais']:
     st.info("👋 Por favor, selecione arquivos para continuar.")
     st.stop()
 
-nomes_arquivos = list(st.session_state['dados_originais'].keys())
-st.session_state['dados_modificados'] = st.session_state['dados_modificados'] or {
-    nome: df.copy() for nome, df in st.session_state['dados_originais'].items()
-}
+# Inicializa dados modificados
+if not st.session_state['dados_modificados']:
+    for nome, df in st.session_state['dados_originais'].items():
+        st.session_state['dados_modificados'][nome] = df.copy()
 
-abas = st.tabs([f"📄 {nome}" for nome in nomes_arquivos])
+# Abas com planilhas
+abas = st.tabs([f"📄 {nome}" for nome in st.session_state['dados_modificados']])
 for i, aba in enumerate(abas):
     with aba:
-        nome_arquivo = nomes_arquivos[i]
-        df_exibir = st.session_state['dados_modificados'][nome_arquivo]
-        st.dataframe(df_exibir, use_container_width=True)
+        nome_arquivo = list(st.session_state['dados_modificados'].keys())[i]
+        st.dataframe(st.session_state['dados_modificados'][nome_arquivo], use_container_width=True)
 
-# --- Busca ---
+# Busca
 st.header("🔎 Buscar Registros ou Linhas Vazias")
 termo_busca = st.text_input("Digite o termo ou deixe vazio para buscar linhas vazias:")
 
@@ -112,55 +105,54 @@ if st.button("🔍 Buscar"):
                 'registro': row
             })
 
-# --- Ações ---
-if st.session_state.busca_resultados:
+# Resultados da busca
+if st.session_state['busca_resultados']:
     st.markdown("---")
-    st.header("🌟 2. Resultados da Busca")
-    st.info(f"✨ Foram encontrados {len(st.session_state.busca_resultados)} registros. Selecione um para editar ou excluir.")
+    st.header("🌟 Resultados da Busca")
+    st.info(f"✨ {len(st.session_state.busca_resultados)} registros encontrados.")
 
-    opcoes_radio = [f"{i+1}. {a['registro'].to_dict()} (Planilha: {a['nome_arquivo']})" for i, a in enumerate(st.session_state.busca_resultados)]
-    selecao_usuario = st.radio("🔎 Selecione o registro que deseja manipular:", options=opcoes_radio, key="selecao_de_registro")
+    opcoes_radio = [
+        f"{i+1}. {a['registro'].to_dict()} (Planilha: {a['nome_arquivo']})"
+        for i, a in enumerate(st.session_state['busca_resultados'])
+    ]
+    selecao_usuario = st.radio("🔎 Selecione o registro:", options=opcoes_radio)
 
     indice_selecionado = opcoes_radio.index(selecao_usuario)
-    resultado_escolhido = st.session_state.busca_resultados[indice_selecionado]
+    resultado_escolhido = st.session_state['busca_resultados'][indice_selecionado]
 
-    registro_encontrado = resultado_escolhido["registro"]
     nome_arquivo_encontrado = resultado_escolhido["nome_arquivo"]
-    df_para_modificar = st.session_state.dados_modificados.get(nome_arquivo_encontrado, st.session_state.dados_originais[nome_arquivo_encontrado])
-    index_registro = registro_encontrado.name
+    index_registro = resultado_escolhido["index"]
+    df_modificado = st.session_state['dados_modificados'][nome_arquivo_encontrado]
 
-    st.subheader("✏️ 3. Ação sobre o Registro Selecionado")
-    acao = st.radio("O que você deseja fazer?", ("Nenhuma", "Excluir o registro", "Editar o registro"), horizontal=True)
+    st.subheader("✏️ Ação sobre o Registro")
+    acao = st.radio("O que deseja fazer?", ("Nenhuma", "Excluir o registro", "Editar o registro"), horizontal=True)
 
     if acao == "Excluir o registro":
-        st.warning("Atenção! Esta ação removerá a linha inteira.")
-        if st.button("🗑️ Confirmar Exclusão", key="confirmar_exclusao"):
-            df_modificado = df_para_modificar.drop(index_registro).reset_index(drop=True)
-            st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado
-            st.success(f"✅ Registro excluído de '{nome_arquivo_encontrado}'!")
+        st.warning("⚠️ Esta ação removerá a linha inteira.")
+        if st.button("🗑️ Confirmar Exclusão"):
+            df_modificado = df_modificado.drop(index_registro)
+            st.session_state['dados_modificados'][nome_arquivo_encontrado] = df_modificado
+            st.success("✅ Registro excluído!")
             st.rerun()
 
     elif acao == "Editar o registro":
-        colunas_disponiveis = df_para_modificar.columns.tolist()
-        coluna_para_editar = st.selectbox("Escolha a coluna para editar:", options=colunas_disponiveis)
-        valor_atual = registro_encontrado[coluna_para_editar]
-        novo_valor = st.text_input(f"Digite o novo valor para '{coluna_para_editar}':", value=str(valor_atual))
+        coluna_para_editar = st.selectbox("Escolha a coluna:", df_modificado.columns)
+        valor_atual = df_modificado.loc[index_registro, coluna_para_editar]
+        novo_valor = st.text_input("Novo valor:", value=str(valor_atual))
 
-        if st.button("📏 Salvar Alteração", key="salvar_edicao"):
-            df_modificado = df_para_modificar.copy()
+        if st.button("📏 Salvar Alteração"):
             try:
                 tipo_original = df_modificado[coluna_para_editar].dtype
-                novo_valor_convertido = pd.Series([novo_valor]).astype(tipo_original).iloc[0]
-                df_modificado.at[index_registro, coluna_para_editar] = novo_valor_convertido
+                valor_convertido = pd.Series([novo_valor]).astype(tipo_original).iloc[0]
+                df_modificado.at[index_registro, coluna_para_editar] = valor_convertido
             except Exception:
                 df_modificado.at[index_registro, coluna_para_editar] = novo_valor
 
-            st.session_state.dados_modificados[nome_arquivo_encontrado] = df_modificado
-            st.success(f"✅ Registro editado em '{nome_arquivo_encontrado}'!")
+            st.session_state['dados_modificados'][nome_arquivo_encontrado] = df_modificado
+            st.success("✅ Registro editado!")
             st.rerun()
 
-
-# --- Download ---
+# Download
 if st.session_state['dados_modificados']:
     st.markdown("---")
     st.header("📥 Baixar Planilhas Modificadas")
@@ -168,9 +160,8 @@ if st.session_state['dados_modificados']:
         csv = obter_csv_binario_para_download(df)
         nome_final = f"{os.path.splitext(nome_arquivo)[0]}_modificado.csv"
         st.download_button(
-            f"⬇️ Baixar {nome_final}",
+            label=f"⬇️ Baixar {nome_final}",
             data=csv,
             file_name=nome_final,
             mime="text/csv"
         )
-
