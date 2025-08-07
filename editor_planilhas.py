@@ -59,7 +59,7 @@ with st.sidebar:
         key="file_uploader"
     )
 
-    # BUGFIX: Lógica para processar os arquivos apenas uma vez por upload
+    # Lógica para processar os arquivos apenas uma vez por upload
     current_file_names = [f.name for f in arquivos_carregados] if arquivos_carregados else []
     
     if arquivos_carregados and set(current_file_names) != set(st.session_state.processed_files):
@@ -90,6 +90,32 @@ with st.sidebar:
         st.session_state.processed_files = current_file_names
         st.rerun()
 
+    # --- Seção de Conversão Rápida na Sidebar ---
+    if st.session_state.get('dados_modificados'):
+        st.markdown("---")
+        st.header("🔄 Conversor Rápido")
+        
+        excel_files_found = any(
+            nome.lower().endswith(('.xlsx', '.xls')) 
+            for nome in st.session_state.dados_modificados.keys()
+        )
+
+        if not excel_files_found:
+            st.info("Nenhum arquivo .xlsx ou .xls carregado para conversão.")
+        else:
+            st.markdown("Converta seus arquivos Excel para CSV:")
+            for nome_arquivo, df in st.session_state.dados_modificados.items():
+                if nome_arquivo.lower().endswith(('.xlsx', '.xls')):
+                    nome_base = os.path.splitext(nome_arquivo)[0]
+                    nome_final_csv = f"{nome_base}.csv"
+                    
+                    st.download_button(
+                        label=f"⬇️ Baixar {nome_final_csv}",
+                        data=converter_df_para_csv(df),
+                        file_name=nome_final_csv,
+                        mime="text/csv",
+                        key=f"convert_{nome_arquivo}"
+                    )
 
 # --- Interface Principal ---
 st.title("📈 Editor e Localizador de Dados")
@@ -172,7 +198,7 @@ if st.session_state.get('busca_resultados'):
             "O que deseja fazer?", 
             ("Nenhuma", "Excluir o registro", "Editar o registro"), 
             horizontal=True, 
-            key=f"acao_{chave_unica_registro}" # BUGFIX: Chave única
+            key=f"acao_{chave_unica_registro}"
         )
 
         if acao == "Excluir o registro":
