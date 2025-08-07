@@ -23,6 +23,7 @@ def carregar_arquivo(arquivo_carregado, nome_original=None):
         extensao = os.path.splitext(nome_do_arquivo)[1].lower()
         if extensao == '.csv':
             try:
+                # Tenta detectar o separador automaticamente
                 df = pd.read_csv(arquivo_carregado, encoding='utf-8', sep=None, engine='python')
             except (UnicodeDecodeError, pd.errors.ParserError):
                 df = pd.read_csv(arquivo_carregado, encoding='latin1', sep=None, engine='python')
@@ -46,6 +47,7 @@ if 'busca_resultados' not in st.session_state:
     st.session_state.busca_resultados = []
 if 'processed_files' not in st.session_state:
     st.session_state.processed_files = []
+# Estado para controlar a caixa "Selecionar Todos"
 if 'select_all' not in st.session_state:
     st.session_state.select_all = False
 
@@ -84,11 +86,9 @@ with st.sidebar:
                 if df is not None:
                     dados_originais[arquivo.name] = df
         
-        # Copia os dados originais para a área de modificação
         for nome, df_original in dados_originais.items():
             st.session_state.dados_modificados[nome] = df_original.copy()
         
-        # Atualiza a lista de arquivos processados e recarrega a página
         st.session_state.processed_files = current_file_names
         st.rerun()
 
@@ -141,7 +141,7 @@ termo_busca = st.text_input("Digite um termo para buscar. Deixe vazio para encon
 
 if st.button("🔍 Buscar"):
     st.session_state.busca_resultados = []
-    st.session_state.select_all = False # Reseta a seleção
+    st.session_state.select_all = False # Reseta a seleção a cada nova busca
     for nome_arquivo, df in st.session_state.dados_modificados.items():
         try:
             if termo_busca:
@@ -158,14 +158,14 @@ if st.button("🔍 Buscar"):
                 })
         except Exception as e:
             st.error(f"Ocorreu um erro durante a busca no arquivo {nome_arquivo}: {e}")
-    # Força o rerun para atualizar a seção de resultados
     st.rerun()
 
-# --- Seção de Resultados da Busca e Ações (MODIFICADA) ---
+# --- Seção de Resultados da Busca e Ações (COM SELEÇÃO MÚLTIPLA) ---
 if st.session_state.get('busca_resultados'):
     st.markdown("---")
     st.header("🌟 Resultados da Busca")
     
+    # Garante que os resultados ainda são válidos (não foram excluídos)
     resultados_validos = [res for res in st.session_state.busca_resultados if res['index'] in st.session_state.dados_modificados.get(res['nome_arquivo'], pd.DataFrame()).index]
 
     if not resultados_validos:
@@ -175,9 +175,8 @@ if st.session_state.get('busca_resultados'):
         st.info(f"✨ {len(resultados_validos)} registro(s) encontrado(s).")
         st.markdown("Marque os registros abaixo para definir uma ação.")
         
-        # Botão para selecionar/deselecionar todos
-        if st.checkbox("Selecionar/Deselecionar Todos", key="select_all"):
-            pass # A ação ocorre por causa do rerun do Streamlit
+        # Caixa de seleção para "Selecionar Todos"
+        st.checkbox("Selecionar/Deselecionar Todos", key="select_all")
 
         selecionados = []
         for i, res in enumerate(resultados_validos):
@@ -185,7 +184,7 @@ if st.session_state.get('busca_resultados'):
             registro_str = ', '.join([f"{k}: {str(v)[:30]}" for k, v in res['registro'].items()])
             label = f"[Índice: {res['index']}] em **'{res['nome_arquivo']}'** -> `{registro_str}`..."
             
-            # O valor do checkbox é controlado pelo estado do "select_all"
+            # O valor de cada checkbox é controlado pelo estado do "select_all"
             if st.checkbox(label, value=st.session_state.select_all, key=f"cb_{chave_unica}"):
                 selecionados.append(res)
         
@@ -196,7 +195,7 @@ if st.session_state.get('busca_resultados'):
         else:
             st.subheader(f"Ações para os {len(selecionados)} registro(s) selecionados")
             
-            # Define as ações possíveis com base na quantidade de itens selecionados
+            # Define as ações com base no número de itens selecionados
             if len(selecionados) == 1:
                 acao = st.radio(
                     "O que deseja fazer?",
@@ -204,7 +203,7 @@ if st.session_state.get('busca_resultados'):
                     horizontal=True,
                     key=f"acao_unica_{selecionados[0]['nome_arquivo']}_{selecionados[0]['index']}"
                 )
-            else: # Mais de um item selecionado
+            else: # Múltiplos itens selecionados
                 acao = st.radio(
                     "O que deseja fazer?",
                     ("Nenhuma", "Excluir todos os registros selecionados"),
@@ -212,7 +211,7 @@ if st.session_state.get('busca_resultados'):
                     key="acao_multipla"
                 )
 
-            # Lógica para Exclusão (única ou em massa)
+            # Lógica para Exclusão
             if acao.startswith("Excluir"):
                 st.warning(f"⚠️ Esta ação removerá permanentemente os {len(selecionados)} registros selecionados. Esta ação é irreversível.")
                 if st.button("🗑️ Confirmar Exclusão", key="confirmar_exclusao"):
@@ -225,17 +224,17 @@ if st.session_state.get('busca_resultados'):
                             para_excluir_por_arquivo[nome_arquivo] = []
                         para_excluir_por_arquivo[nome_arquivo].append(indice)
                     
-                    # Executa a exclusão em massa por arquivo
                     for nome_arquivo, indices in para_excluir_por_arquivo.items():
                         df_modificado = st.session_state.dados_modificados[nome_arquivo]
                         df_modificado.drop(indices, inplace=True)
+                        # Resetar o índice é uma boa prática após apagar linhas
                         st.session_state.dados_modificados[nome_arquivo] = df_modificado.reset_index(drop=True)
                     
                     st.session_state.busca_resultados = []
                     st.success(f"✅ {len(selecionados)} registro(s) excluído(s) com sucesso!")
                     st.rerun()
 
-            # Lógica para Edição (apenas se 1 item estiver selecionado)
+            # Lógica para Edição
             elif acao == "Editar o registro" and len(selecionados) == 1:
                 resultado_escolhido = selecionados[0]
                 nome_arquivo_encontrado = resultado_escolhido["nome_arquivo"]
@@ -258,15 +257,13 @@ if st.session_state.get('busca_resultados'):
                     if st.form_submit_button("💾 Salvar Alterações"):
                         for coluna, novo_valor_str in novos_valores.items():
                             try:
-                                # Tenta converter para o tipo original da coluna para manter a consistência
                                 tipo_original = df_modificado[coluna].dtype
                                 valor_convertido = pd.Series([novo_valor_str]).astype(tipo_original).iloc[0]
                                 df_modificado.at[index_registro, coluna] = valor_convertido
                             except (ValueError, TypeError):
-                                # Se a conversão falhar, mantém como string
                                 df_modificado.at[index_registro, coluna] = novo_valor_str
                         
-                        st.session_state.busca_resultados = [] # Limpa resultados obsoletos
+                        st.session_state.busca_resultados = []
                         st.success("✅ Registro atualizado com sucesso!")
                         st.rerun()
 
@@ -274,7 +271,6 @@ if st.session_state.get('busca_resultados'):
 if st.session_state.dados_modificados:
     st.markdown("---")
     st.header("📥 Baixar Planilhas Modificadas")
-    st.markdown("As planilhas modificadas serão salvas no formato CSV.")
     
     for nome_arquivo, df in st.session_state.dados_modificados.items():
         nome_base = os.path.splitext(nome_arquivo)[0]
