@@ -46,6 +46,8 @@ if 'busca_resultados' not in st.session_state:
     st.session_state.busca_resultados = []
 if 'processed_files' not in st.session_state:
     st.session_state.processed_files = []
+if 'select_all' not in st.session_state:
+    st.session_state.select_all = False
 
 
 # --- Barra Lateral (Sidebar) para Upload ---
@@ -139,6 +141,7 @@ termo_busca = st.text_input("Digite um termo para buscar. Deixe vazio para encon
 
 if st.button("🔍 Buscar"):
     st.session_state.busca_resultados = []
+    st.session_state.select_all = False # Reseta a seleção
     for nome_arquivo, df in st.session_state.dados_modificados.items():
         try:
             if termo_busca:
@@ -158,7 +161,7 @@ if st.button("🔍 Buscar"):
     # Força o rerun para atualizar a seção de resultados
     st.rerun()
 
-# --- Seção de Resultados da Busca e Ações ---
+# --- Seção de Resultados da Busca e Ações (MODIFICADA) ---
 if st.session_state.get('busca_resultados'):
     st.markdown("---")
     st.header("🌟 Resultados da Busca")
@@ -170,72 +173,102 @@ if st.session_state.get('busca_resultados'):
         st.session_state.busca_resultados = []
     else:
         st.info(f"✨ {len(resultados_validos)} registro(s) encontrado(s).")
+        st.markdown("Marque os registros abaixo para definir uma ação.")
         
-        opcoes_selecao = []
+        # Botão para selecionar/deselecionar todos
+        if st.checkbox("Selecionar/Deselecionar Todos", key="select_all"):
+            pass # A ação ocorre por causa do rerun do Streamlit
+
+        selecionados = []
         for i, res in enumerate(resultados_validos):
-            registro_str = ', '.join([f"{k}: {str(v)[:20]}" for k, v in res['registro'].items()])
-            # Chave única para cada opção
-            opcoes_selecao.append(f"{i+1}. [Índice: {res['index']}] em '{res['nome_arquivo']}' -> {registro_str}...")
-
-        selecao_usuario = st.selectbox(
-            "🔎 Selecione o registro para tomar uma ação:", 
-            options=opcoes_selecao, 
-            index=0,
-            key="selecao_registro_busca"
-        )
+            chave_unica = f"{res['nome_arquivo']}_{res['index']}"
+            registro_str = ', '.join([f"{k}: {str(v)[:30]}" for k, v in res['registro'].items()])
+            label = f"[Índice: {res['index']}] em **'{res['nome_arquivo']}'** -> `{registro_str}`..."
+            
+            # O valor do checkbox é controlado pelo estado do "select_all"
+            if st.checkbox(label, value=st.session_state.select_all, key=f"cb_{chave_unica}"):
+                selecionados.append(res)
         
-        indice_selecionado_na_lista = opcoes_selecao.index(selecao_usuario)
-        resultado_escolhido = resultados_validos[indice_selecionado_na_lista]
+        st.markdown("---")
 
-        nome_arquivo_encontrado = resultado_escolhido["nome_arquivo"]
-        index_registro = resultado_escolhido["index"]
-        
-        # Chave única combinando nome do arquivo e índice do registro
-        chave_unica_registro = f"{nome_arquivo_encontrado}_{index_registro}"
+        if not selecionados:
+            st.info("Selecione um ou mais registros acima para escolher uma ação.")
+        else:
+            st.subheader(f"Ações para os {len(selecionados)} registro(s) selecionados")
+            
+            # Define as ações possíveis com base na quantidade de itens selecionados
+            if len(selecionados) == 1:
+                acao = st.radio(
+                    "O que deseja fazer?",
+                    ("Nenhuma", "Excluir o registro", "Editar o registro"),
+                    horizontal=True,
+                    key=f"acao_unica_{selecionados[0]['nome_arquivo']}_{selecionados[0]['index']}"
+                )
+            else: # Mais de um item selecionado
+                acao = st.radio(
+                    "O que deseja fazer?",
+                    ("Nenhuma", "Excluir todos os registros selecionados"),
+                    horizontal=True,
+                    key="acao_multipla"
+                )
 
-        st.subheader("✏️ Ação sobre o Registro Selecionado")
-        acao = st.radio(
-            "O que deseja fazer?", 
-            ("Nenhuma", "Excluir o registro", "Editar o registro"), 
-            horizontal=True, 
-            key=f"acao_{chave_unica_registro}"
-        )
-
-        if acao == "Excluir o registro":
-            st.warning(f"⚠️ Esta ação removerá permanentemente a linha de índice `{index_registro}` da planilha `{nome_arquivo_encontrado}`.")
-            if st.button("🗑️ Confirmar Exclusão", key=f"excluir_{chave_unica_registro}"):
-                df_modificado = st.session_state.dados_modificados[nome_arquivo_encontrado]
-                df_modificado.drop(index_registro, inplace=True)
-                st.session_state.busca_resultados = [] # Limpa resultados obsoletos
-                st.success("✅ Registro excluído com sucesso!")
-                st.rerun()
-
-        elif acao == "Editar o registro":
-            st.subheader(f"📝 Editando linha de índice `{index_registro}` em `{nome_arquivo_encontrado}`")
-            with st.form(key=f"form_edit_{chave_unica_registro}"):
-                df_modificado = st.session_state.dados_modificados[nome_arquivo_encontrado]
-                linha_original = df_modificado.loc[index_registro]
-                novos_valores = {}
-                
-                for coluna, valor_atual in linha_original.items():
-                    novos_valores[coluna] = st.text_input(
-                        f"Novo valor para '{coluna}':",
-                        value=str(valor_atual),
-                        key=f"edit_input_{chave_unica_registro}_{coluna}"
-                    )
-                
-                if st.form_submit_button("💾 Salvar Alterações"):
-                    for coluna, novo_valor_str in novos_valores.items():
-                        try:
-                            tipo_original = df_modificado[coluna].dtype
-                            valor_convertido = pd.Series([novo_valor_str]).astype(tipo_original).iloc[0]
-                            df_modificado.at[index_registro, coluna] = valor_convertido
-                        except (ValueError, TypeError):
-                            df_modificado.at[index_registro, coluna] = novo_valor_str
+            # Lógica para Exclusão (única ou em massa)
+            if acao.startswith("Excluir"):
+                st.warning(f"⚠️ Esta ação removerá permanentemente os {len(selecionados)} registros selecionados. Esta ação é irreversível.")
+                if st.button("🗑️ Confirmar Exclusão", key="confirmar_exclusao"):
                     
-                    st.session_state.busca_resultados = [] # Limpa resultados obsoletos
-                    st.success("✅ Registro atualizado com sucesso!")
+                    para_excluir_por_arquivo = {}
+                    for item in selecionados:
+                        nome_arquivo = item['nome_arquivo']
+                        indice = item['index']
+                        if nome_arquivo not in para_excluir_por_arquivo:
+                            para_excluir_por_arquivo[nome_arquivo] = []
+                        para_excluir_por_arquivo[nome_arquivo].append(indice)
+                    
+                    # Executa a exclusão em massa por arquivo
+                    for nome_arquivo, indices in para_excluir_por_arquivo.items():
+                        df_modificado = st.session_state.dados_modificados[nome_arquivo]
+                        df_modificado.drop(indices, inplace=True)
+                        st.session_state.dados_modificados[nome_arquivo] = df_modificado.reset_index(drop=True)
+                    
+                    st.session_state.busca_resultados = []
+                    st.success(f"✅ {len(selecionados)} registro(s) excluído(s) com sucesso!")
                     st.rerun()
+
+            # Lógica para Edição (apenas se 1 item estiver selecionado)
+            elif acao == "Editar o registro" and len(selecionados) == 1:
+                resultado_escolhido = selecionados[0]
+                nome_arquivo_encontrado = resultado_escolhido["nome_arquivo"]
+                index_registro = resultado_escolhido["index"]
+                chave_unica_registro = f"{nome_arquivo_encontrado}_{index_registro}"
+
+                st.subheader(f"📝 Editando linha de índice `{index_registro}` em `{nome_arquivo_encontrado}`")
+                with st.form(key=f"form_edit_{chave_unica_registro}"):
+                    df_modificado = st.session_state.dados_modificados[nome_arquivo_encontrado]
+                    linha_original = df_modificado.loc[index_registro]
+                    novos_valores = {}
+                    
+                    for coluna, valor_atual in linha_original.items():
+                        novos_valores[coluna] = st.text_input(
+                            f"Novo valor para '{coluna}':",
+                            value=str(valor_atual),
+                            key=f"edit_input_{chave_unica_registro}_{coluna}"
+                        )
+                    
+                    if st.form_submit_button("💾 Salvar Alterações"):
+                        for coluna, novo_valor_str in novos_valores.items():
+                            try:
+                                # Tenta converter para o tipo original da coluna para manter a consistência
+                                tipo_original = df_modificado[coluna].dtype
+                                valor_convertido = pd.Series([novo_valor_str]).astype(tipo_original).iloc[0]
+                                df_modificado.at[index_registro, coluna] = valor_convertido
+                            except (ValueError, TypeError):
+                                # Se a conversão falhar, mantém como string
+                                df_modificado.at[index_registro, coluna] = novo_valor_str
+                        
+                        st.session_state.busca_resultados = [] # Limpa resultados obsoletos
+                        st.success("✅ Registro atualizado com sucesso!")
+                        st.rerun()
 
 # --- Seção de Download ---
 if st.session_state.dados_modificados:
