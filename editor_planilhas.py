@@ -44,6 +44,8 @@ if 'dados_modificados' not in st.session_state:
     st.session_state.dados_modificados = {}
 if 'busca_resultados' not in st.session_state:
     st.session_state.busca_resultados = []
+if 'processed_files' not in st.session_state:
+    st.session_state.processed_files = []
 
 
 # --- Barra Lateral (Sidebar) para Upload ---
@@ -57,7 +59,10 @@ with st.sidebar:
         key="file_uploader"
     )
 
-    if arquivos_carregados:
+    # BUGFIX: Lógica para processar os arquivos apenas uma vez por upload
+    current_file_names = [f.name for f in arquivos_carregados] if arquivos_carregados else []
+    
+    if arquivos_carregados and set(current_file_names) != set(st.session_state.processed_files):
         # Limpa o estado anterior para carregar os novos arquivos
         dados_originais = {}
         st.session_state.dados_modificados = {}
@@ -81,8 +86,8 @@ with st.sidebar:
         for nome, df_original in dados_originais.items():
             st.session_state.dados_modificados[nome] = df_original.copy()
         
-        # BUGFIX: A linha abaixo causava o erro. Não se deve modificar o estado do uploader diretamente.
-        # st.session_state.file_uploader = [] 
+        # Atualiza a lista de arquivos processados e recarrega a página
+        st.session_state.processed_files = current_file_names
         st.rerun()
 
 
