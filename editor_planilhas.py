@@ -81,8 +81,8 @@ with st.sidebar:
         for nome, df_original in dados_originais.items():
             st.session_state.dados_modificados[nome] = df_original.copy()
         
-        # Limpa o uploader e recarrega a página para refletir as mudanças
-        st.session_state.file_uploader = []
+        # BUGFIX: A linha abaixo causava o erro. Não se deve modificar o estado do uploader diretamente.
+        # st.session_state.file_uploader = [] 
         st.rerun()
 
 
